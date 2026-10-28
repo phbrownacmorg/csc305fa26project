@@ -34,3 +34,13 @@ output.flag::before {
 .valid {
     color: green;
 }
+
+/* Table properties */
+caption > h2 {
+  margin-bottom: 0;
+}
+
+td {
+  padding-left: 0.5em;
+  padding-right: 0.5em;
+}

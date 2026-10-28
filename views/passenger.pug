@@ -21,3 +21,15 @@ block content
           td= value
   else
     h2 No form data
+
+  if flights
+    table
+      caption
+        h2 Flights 
+      tr
+        each col in Object.keys(flights[0])
+          th= col
+      each row in flights
+        tr 
+          each val in row
+            td= val
