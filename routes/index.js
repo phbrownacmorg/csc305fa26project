@@ -12,13 +12,7 @@ router.get('/', function(req, res, next) {
       queryFlights(req, res, next);
     }
     else {
-      renderPage('error', {
-        message: `Unknown role: ${formdata.role}`,
-        error: {
-          status: 400,
-          stack: null
-        }
-      });
+      renderErrorPage(400, `Unknown role: ${formdata.role}`, res);
     }
   }
   else {
@@ -33,22 +27,44 @@ function queryFlights(req, res, next) {
     const db = req.app.locals.db;
     const query = 'select FltNum as Flight, Origin, Dest, Departs, Arrives, ModelName as Aircraft '
                   + 'from Flight natural join ACModel order by Departs;';
-    const statement = db.prepare(query);
-    req.app.locals.flights = statement.all();
-    //statement.close();
+    req.app.locals.flights = db.prepare(query).all();
     console.info("Flights results", req.app.locals.flights.length);
-    renderPage(req, res, next);  
+    if (req.query.role === "Passenger") {
+      queryPassengerName(req, res, next);
+    }
+    else {
+      renderPage(req, res, next);
+    }
   }
   else {
-      renderPage('error', {
-        message: "Flights query failed to find database",
-        error: {
-          status: 500,
-          stack: null
-        }
-      });  
+    renderErrorPage(500, "Flights query failed to find database", res);
   }
 }
+
+function queryPassengerName(req, res, next) {
+  if (req.app.locals.db) {
+    const db = req.app.locals.db;
+    const query = 'select FirstName, LastName from Passenger where PsgrID = $id;';
+    req.app.locals.psgr_name = db.prepare(query).get({ $id: req.query.ID });
+    if (req.app.locals.psgr_name) {
+      const name = req.app.locals.psgr_name;
+      req.app.locals.title = `Welcome, ${name.FirstName} ${name.LastName}`;
+      renderPage(req, res, next);
+    }
+    else {
+      renderErrorPage(400, `No passenger with ID ${req.query.ID}`, res);
+    }
+  }
+  else {
+      renderErrorPage(500, "Tickets query failed to find database", res);
+  }
+}
+
+// SELECT TktNum as Ticket, FltNum as Flight, Origin as "From", Dest as "To", FltDate as Date, Departs, Arrives, ModelName as Aircraft, Seat
+// from Ticket natural join Flight natural join ACModel
+// where PsgrID = 875;
+
+
 
 function queryFlightsDisp(req, res, next) {
   renderPage(req, res, next);
@@ -59,8 +75,21 @@ function renderPage(req, res, next) {
     title: req.app.locals.title,
     formdata: req.query,
     role: req.query.role,
-    flights: req.app.locals.flights
+    flights: req.app.locals.flights,
+    tickets: req.app.locals.tickets,
+    name: req.app.locals.psgr_name
   });
 }
+
+function renderErrorPage(code, msg, res) {
+  res.render('error', {
+    message: msg,
+    error: {
+      status: code,
+      stack: null
+    }
+  })
+}
+
 
 module.exports = router;
