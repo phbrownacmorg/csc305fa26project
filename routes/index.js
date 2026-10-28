@@ -3,7 +3,7 @@ var router = express.Router();
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
-  let formdata = req.query;
+  const formdata = req.query;
   console.log('Formdata:', formdata);
   req.locals = new Object();
   if (formdata.role) {
@@ -28,7 +28,7 @@ router.get('/', function(req, res, next) {
 
 function queryFlightsPsgr(req, res, next) {
   if (req.app.locals.db) {
-    let db = req.app.locals.db;
+    //const db = req.app.locals.db;
     
   }
   renderPage(req, res, next);
