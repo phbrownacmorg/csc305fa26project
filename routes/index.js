@@ -3,18 +3,23 @@ var router = express.Router();
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
-  console.info('GET Formdata:', req.app.locals.formdata);
+  console.info('GET Formdata:', req.query);
   makePage(req.query, req, res, next);
 });
 
 /* POST home page */
 router.post('/', function(req, res, next) {
-  console.info('POST Formdata:', req.app.locals.formdata);
+  console.info('POST Formdata:', req.body);
   makePage(req.body, res, next);
 });
 
 function makePage(formdata, req, res, next) {
   req.app.locals.formdata = formdata;
+  if (formdata.action) { // Do actions here, then continue and display the new state of affairs
+    if (formdata.action == "cancel_ticket") {
+      cancelTicket(formdata.ticket_ID, req.app.locals.db);
+    }
+  }
   if (formdata.role) {
     req.app.locals.page = formdata.role.toLowerCase();
     req.app.locals.title = formdata.role
@@ -30,6 +35,12 @@ function makePage(formdata, req, res, next) {
     req.app.locals.title = 'Grasshopper Air';
     renderPage(formdata, req, res, next);
   }
+}
+
+function cancelTicket(ticket_ID, db) {
+  const sql = 'delete from Ticket where TktNum = $tktnum;';
+  const rowsChanged = db.prepare(sql).run({ $tktnum: ticket_ID });
+  console.info(`Canceling ticket changed ${rowsChanged} rows`);
 }
 
 function queryFlights(formdata, req, res, next) {
@@ -59,21 +70,35 @@ function queryPassengerName(formdata, req, res, next) {
     if (name) {
       req.app.locals.psgr_name = name;
       req.app.locals.title = `Welcome, ${name.FirstName} ${name.LastName}`;
-      renderPage(formdata, req, res, next);
+      queryTickets(formdata, req, res, next);
     }
     else {
       renderErrorPage(400, `No passenger has ID ${formdata.ID}`, formdata, res);
     }
   }
   else {
-      renderErrorPage(500, "Tickets query failed to find database", formdata, res);
+      renderErrorPage(500, "Passenger-name query failed to find database", formdata, res);
   }
 }
 
-// SELECT TktNum as Ticket, FltNum as Flight, Origin as "From", Dest as "To", FltDate as Date, Departs, Arrives, ModelName as Aircraft, Seat
-// from Ticket natural join Flight natural join ACModel
-// where PsgrID = 875;
-
+function queryTickets(formdata, req, res, next) {
+  if (req.app.locals.db) {
+    const db = req.app.locals.db;
+    const sql = 'SELECT TktNum as Ticket, FltNum as Flight, Origin as "From", Dest as "To",'
+                + ' FltDate as Date, Departs, Arrives, ModelName as Aircraft, Seat'
+                + ' from Ticket natural join Flight natural join ACModel'
+                + ' where PsgrID = $id;';
+    const tickets = db.prepare(sql).all({ $id: formdata.ID });
+    if (tickets) {
+      console.info(`${tickets.length} tickets found`);
+      req.app.locals.tickets = tickets;
+      renderPage(formdata, req, res, next);
+    }
+  }
+  else {
+    renderErrorPage(500, "Tickets query failed to find database", formdata, res);
+  }
+}
 
 function renderPage(formdata, req, res, next) {
   res.render(req.app.locals.page, { 

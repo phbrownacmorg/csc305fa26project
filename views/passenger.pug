@@ -2,11 +2,48 @@ extends layout
 
 block content
   h1= title
-  div(id="form")
-    form(action="",method="get")
-      input(type="hidden",name="ID",value=`${formdata.ID}`)
-      input(type="hidden",name="role",value="Passenger")
-      input(type="submit")
+
+  if tickets
+    if tickets.length > 0
+      table
+        caption
+          h2 Tickets
+        tr
+          each col in Object.keys(tickets[0])
+            th= col
+        each row in tickets 
+          tr
+            each val in row
+              td= val
+            td
+              form(action="", method="get")
+                input(type="hidden",name="action",value="cancel_ticket")
+                input(type="hidden",name="ID",value=`${formdata.ID}`)
+                input(type="hidden",name="role",value=`${formdata.role}`)
+                input(type="hidden",name="ticket_ID",value=`${row['Ticket']}`)
+                input(type="submit",value="Cancel")
+    else
+      h2 No tickets to show
+
+  if flights
+    table
+      caption
+        h2 Flights 
+      tr
+        each col in Object.keys(flights[0])
+          th= col
+      each row in flights
+        tr 
+          each val in row
+            td= val
+
+          form(action="", method="get")
+            input(type="hidden",name="action",value="book_flight")
+            input(type="hidden",name="ID",value=`${formdata.ID}`)
+            input(type="hidden",name="role",value=`${formdata.role}`)
+            input(type="hidden",name="FltNum",value=`${row['Flight']}`)
+            input(type="date",name="FltDate",value=`Date.now().toISODate()`)
+
 
   if formdata.role
     table
@@ -22,14 +59,3 @@ block content
   else
     h2 No form data
 
-  if flights
-    table
-      caption
-        h2 Flights 
-      tr
-        each col in Object.keys(flights[0])
-          th= col
-      each row in flights
-        tr 
-          each val in row
-            td= val
