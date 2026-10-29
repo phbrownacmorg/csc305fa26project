@@ -3,74 +3,70 @@ var router = express.Router();
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
-  req.app.locals.formdata = req.query;
   console.info('GET Formdata:', req.app.locals.formdata);
-  makePage(req, res, next);
+  makePage(req.query, req, res, next);
 });
 
 /* POST home page */
 router.post('/', function(req, res, next) {
-  req.app.locals.formdata = req.body;
   console.info('POST Formdata:', req.app.locals.formdata);
-  makePage(req, res, next);
+  makePage(req.body, res, next);
 });
 
-function makePage(req, res, next) {
-  const formdata = req.app.locals.formdata;
+function makePage(formdata, req, res, next) {
+  req.app.locals.formdata = formdata;
   if (formdata.role) {
     req.app.locals.page = formdata.role.toLowerCase();
     req.app.locals.title = formdata.role
     if (formdata.role === "Passenger" || formdata.role === "Scheduler") {
-      queryFlights(req, res, next);
+      queryFlights(formdata, req, res, next);
     }
     else {
-      renderErrorPage(400, `Unknown role: ${formdata.role}`, res);
+      renderErrorPage(400, `Unknown role: ${formdata.role}`, formdata, res);
     }
   }
   else {
     req.app.locals.page = 'index';
     req.app.locals.title = 'Grasshopper Air';
-    renderPage(req, res, next);
+    renderPage(formdata, req, res, next);
   }
 }
 
-function queryFlights(req, res, next) {
+function queryFlights(formdata, req, res, next) {
   if (req.app.locals.db) {
     const db = req.app.locals.db;
-    const formdata = req.app.locals.formdata;
     const sql = 'select FltNum as Flight, Origin, Dest, Departs, Arrives, ModelName as Aircraft '
                   + 'from Flight natural join ACModel order by Departs;';
     req.app.locals.flights = db.prepare(sql).all();
     console.info("Flights results", req.app.locals.flights.length);
     if (formdata.role === "Passenger") {
-      queryPassengerName(req, res, next);
+      queryPassengerName(formdata, req, res, next);
     }
     else {
-      renderPage(req, res, next);
+      renderPage(formdata, req, res, next);
     }
   }
   else {
-    renderErrorPage(500, "Flights query failed to find database", res);
+    renderErrorPage(500, "Flights query failed to find database", formdata, res);
   }
 }
 
-function queryPassengerName(req, res, next) {
+function queryPassengerName(formdata, req, res, next) {
   if (req.app.locals.db) {
     const db = req.app.locals.db;
-    const formdata = req.app.locals.formdata;
     const sql = 'select FirstName, LastName from Passenger where PsgrID = $id;';
     const name = db.prepare(sql).get({ $id: formdata.ID });
     if (name) {
       req.app.locals.psgr_name = name;
       req.app.locals.title = `Welcome, ${name.FirstName} ${name.LastName}`;
-      renderPage(req, res, next);
+      renderPage(formdata, req, res, next);
     }
     else {
-      renderErrorPage(400, `No passenger has ID ${formdata.ID}`, res);
+      renderErrorPage(400, `No passenger has ID ${formdata.ID}`, formdata, res);
     }
   }
   else {
-      renderErrorPage(500, "Tickets query failed to find database", res);
+      renderErrorPage(500, "Tickets query failed to find database", formdata, res);
   }
 }
 
@@ -79,12 +75,7 @@ function queryPassengerName(req, res, next) {
 // where PsgrID = 875;
 
 
-function queryFlightsDisp(req, res, next) {
-  renderPage(req, res, next);
-}
-
-function renderPage(req, res, next) {
-  const formdata = req.app.locals.formdata;
+function renderPage(formdata, req, res, next) {
   res.render(req.app.locals.page, { 
     title: req.app.locals.title,
     formdata: formdata,
@@ -95,7 +86,7 @@ function renderPage(req, res, next) {
   });
 }
 
-function renderErrorPage(code, msg, res) {
+function renderErrorPage(code, msg, formdata, res) {
   let codemsg = '500: Internal server error';
   switch (code) {
     case 400:
@@ -111,7 +102,7 @@ function renderErrorPage(code, msg, res) {
     message: msg,
     error: {
       status: codemsg,
-      stack: null
+      stack: JSON.stringify(formdata)
     }
   })
 }
