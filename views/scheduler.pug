@@ -2,11 +2,18 @@ extends layout
 
 block content
   h1= title
-  div(id="form")
-    form(action="",method="get")
-      input(type="hidden",name="ID",value=`${formdata.ID}`)
-      input(type="hidden",name="role",value="Dispatcher")
-      input(type="submit")
+
+  if flights
+    table
+      caption
+        h2 Flights 
+      tr
+        each col in Object.keys(flights[0])
+          th= col
+      each row in flights
+        tr 
+          each val in row
+            td= val
 
   if formdata.role
     table
@@ -22,14 +29,11 @@ block content
   else
     h2 No form data
 
-  if flights
-    table
-      caption
-        h2 Flights 
-      tr
-        each col in Object.keys(flights[0])
-          th= col
-      each row in flights
-        tr 
-          each val in row
-            td= val
+
+
+  //- div(id="form")
+  //-   form(action="",method="get")
+  //-     input(type="hidden",name="ID",value=`${formdata.ID}`)
+  //-     input(type="hidden",name="role",value="Dispatcher")
+  //-     input(type="submit")
+

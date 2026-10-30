@@ -15,50 +15,87 @@ router.post('/', function(req, res, next) {
 
 function makePage(formdata, req, res, next) {
   req.app.locals.formdata = formdata;
-  if (formdata.action) { // Do actions here, then continue and display the new state of affairs
-    if (formdata.action == "cancel_ticket") {
-      cancelTicket(formdata.ticket_ID, req.app.locals.db);
-    }
-  }
-  if (formdata.role) {
-    req.app.locals.page = formdata.role.toLowerCase();
-    req.app.locals.title = formdata.role
-    if (formdata.role === "Passenger" || formdata.role === "Scheduler") {
-      queryFlights(formdata, req, res, next);
+  try {
+    performActions(formdata, req); // Make any requested changes to the database
+
+    // Do any needed querying of the database
+    if (formdata.role) {
+      req.app.locals.page = formdata.role.toLowerCase();
+      req.app.locals.title = formdata.role
+      queryDatabase(formdata, req, res, next);
     }
     else {
-      renderErrorPage(400, `Unknown role: ${formdata.role}`, formdata, res);
+      req.app.locals.page = 'index';
+      req.app.locals.title = 'Grasshopper Air';
     }
-  }
-  else {
-    req.app.locals.page = 'index';
-    req.app.locals.title = 'Grasshopper Air';
+
+    // Finally, render the page
     renderPage(formdata, req, res, next);
+  } catch (err) {
+    renderErrorPage(err, req, res, next);
+  }
+}
+
+
+//-------------------------------- ACTIONS ------------------------------------
+
+function performActions(formdata, req) {
+  if (formdata.action) {
+    switch(formdata.action) {
+      case "cancel_ticket":
+        cancelTicket(formdata.ticket_ID, req.app.locals.db);
+        break;
+      case "book_flight":
+        bookFlight(formdata, req);
+        break;
+    }
   }
 }
 
 function cancelTicket(ticket_ID, db) {
   const sql = 'delete from Ticket where TktNum = $tktnum;';
-  const rowsChanged = db.prepare(sql).run({ $tktnum: ticket_ID });
-  console.info(`Canceling ticket changed ${rowsChanged} rows`);
+  const changes = db.prepare(sql).run({ $tktnum: ticket_ID });
+  console.info(`Canceling ticket changed ${changes.changes} row(s)`);
+}
+
+function bookFlight(formdata, req) {
+  const db = req.app.locals.db;
+  const sql = 'insert into Ticket (PsgrID, FltNum, FltDate)'
+              + ' values ($id, $fltnum, $fltdate);';
+  const changes = db.prepare(sql).run({ $id: formdata.ID, 
+                                        $fltnum: formdata.FltNum, 
+                                        $fltdate: formdata.FltDate });
+  console.info(`Booking flight changed ${changes.changes} row(s)`)
+}
+
+
+// -------------------------------- QUERIES ------------------------------------
+
+function queryDatabase(formdata, req, res, next) {
+  if (formdata.role) {
+    if (formdata.role === "Passenger" || formdata.role === "Scheduler") {
+      queryFlights(formdata, req, res, next);
+    }
+    else {
+      throw new Error(`400 Unknown role: ${formdata.role}`);
+    }
+  }  // No role, no query
 }
 
 function queryFlights(formdata, req, res, next) {
   if (req.app.locals.db) {
     const db = req.app.locals.db;
-    const sql = 'select FltNum as Flight, Origin, Dest, Departs, Arrives, ModelName as Aircraft '
-                  + 'from Flight natural join ACModel order by Departs;';
+    const sql = 'select FltNum as Flight, Origin, Dest, Departs, Arrives,'
+                  + ' ModelName as Aircraft'
+                  + ' from Flight natural join ACModel order by Departs;';
     req.app.locals.flights = db.prepare(sql).all();
-    console.info("Flights results", req.app.locals.flights.length);
+    console.info(req.app.locals.flights.length, "flights found", );
     if (formdata.role === "Passenger") {
       queryPassengerName(formdata, req, res, next);
     }
-    else {
-      renderPage(formdata, req, res, next);
-    }
   }
   else {
-    renderErrorPage(500, "Flights query failed to find database", formdata, res);
+    throw new Error("500 Flights query failed to find database");
   }
 }
 
@@ -73,32 +110,37 @@ function queryPassengerName(formdata, req, res, next) {
       queryTickets(formdata, req, res, next);
     }
     else {
-      renderErrorPage(400, `No passenger has ID ${formdata.ID}`, formdata, res);
+      throw new Error(`400 No passenger has ID ${formdata.ID}`);
     }
   }
   else {
-      renderErrorPage(500, "Passenger-name query failed to find database", formdata, res);
+    throw new Error("500 Passenger-name query failed to find database");
   }
 }
 
 function queryTickets(formdata, req, res, next) {
   if (req.app.locals.db) {
     const db = req.app.locals.db;
-    const sql = 'SELECT TktNum as Ticket, FltNum as Flight, Origin as "From", Dest as "To",'
-                + ' FltDate as Date, Departs, Arrives, ModelName as Aircraft, Seat'
+    const sql = 'SELECT TktNum as Ticket, FltNum as Flight, Origin as "From",'
+                + ' Dest as "To", FltDate as Date, Departs, Arrives,'
+                + ' ModelName as Aircraft, Seat'
                 + ' from Ticket natural join Flight natural join ACModel'
-                + ' where PsgrID = $id;';
+                + ' where PsgrID = $id'
+                + ' order by FltDate, Departs;';
     const tickets = db.prepare(sql).all({ $id: formdata.ID });
     if (tickets) {
       console.info(`${tickets.length} tickets found`);
       req.app.locals.tickets = tickets;
-      renderPage(formdata, req, res, next);
     }
   }
   else {
-    renderErrorPage(500, "Tickets query failed to find database", formdata, res);
+    throw new Error("500 Tickets query failed to find database");
   }
 }
+
+
+
+// ----------------------------- RENDER PAGES ---------------------------------
 
 function renderPage(formdata, req, res, next) {
   res.render(req.app.locals.page, { 
@@ -111,25 +153,41 @@ function renderPage(formdata, req, res, next) {
   });
 }
 
-function renderErrorPage(code, msg, formdata, res) {
-  let codemsg = '500: Internal server error';
+function renderErrorPage(err, req, res, next) {
+  let code = 500;
+  let msg = err.message;
+  
+  // Does the message start with a three-digit status code?
+  const regex = /^[0-9]{3}/
+  const found = msg.match(regex);
+  if (found) {
+    code = parseInt(found[0]);
+    msg = msg.slice(3).trim();
+  }
+
+  // Set codemsg
+  let codemsg = '';
   switch (code) {
     case 400:
-      codemsg = "400: Bad request";
+      codemsg = "400 Bad request";
       break;
     case 518: // Included for the humor
-      codemsg = "518: I'm a teapot"; // Yes, this is a real HTTP response code
+      codemsg = "518 I'm a teapot"; // Yes, this is a real HTTP response code
       break;
     default: // Stick with 500
+      codemsg = `${code} Internal server error`;
       break;
   }
+
+  // Render the page
   res.render('error', {
     message: msg,
     error: {
       status: codemsg,
-      stack: JSON.stringify(formdata)
-    }
-  })
+      stack: err.stack,
+    },
+    formdata: JSON.stringify(req.app.locals.formdata)
+  });
 }
 
 

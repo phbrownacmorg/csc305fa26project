@@ -25,6 +25,9 @@ block content
     else
       h2 No tickets to show
 
+  //- This the date in GMT, so for the last few hours of each day this is ahead of Eastern Time.  Life's tough.
+  - var today = (new Date()).toISOString().slice(0,10);
+
   if flights
     table
       caption
@@ -32,17 +35,19 @@ block content
       tr
         each col in Object.keys(flights[0])
           th= col
+        th Book a flight
       each row in flights
         tr 
           each val in row
             td= val
-
-          form(action="", method="get")
-            input(type="hidden",name="action",value="book_flight")
-            input(type="hidden",name="ID",value=`${formdata.ID}`)
-            input(type="hidden",name="role",value=`${formdata.role}`)
-            input(type="hidden",name="FltNum",value=`${row['Flight']}`)
-            input(type="date",name="FltDate",value=`Date.now().toISODate()`)
+          td
+            form(action="", method="get")
+              input(type="hidden",name="action",value="book_flight")
+              input(type="hidden",name="ID",value=`${formdata.ID}`)
+              input(type="hidden",name="role",value=`${formdata.role}`)
+              input(type="hidden",name="FltNum",value=`${row['Flight']}`)
+              input(type="date",name="FltDate",required,min=`${today}`)
+              input(type="submit",value="Book")
 
 
   if formdata.role
